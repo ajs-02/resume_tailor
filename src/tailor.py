@@ -1,5 +1,7 @@
 import os
 import sys
+import json
+import re
 from dotenv import load_dotenv
 from google import genai
 
@@ -23,7 +25,7 @@ class ResumeTailor:
         self.model_name = "gemini-2.0-flash"
         print(f"[INFO] ResumeTailor initialized with model: {self.model_name}")
     
-    def tailor_resume(self, resume_text: str, job_description: str) -> str:
+    def tailor_resume(self, resume_text: str, job_description: str) -> dict:
         """
         Tailors a resume to match a specific job description.
         
@@ -32,26 +34,24 @@ class ResumeTailor:
             job_description (str): The job posting description
             
         Returns:
-            str: The tailored resume text
+            dict: Structured dictionary with resume sections
         """
         print("[INFO] Starting resume tailoring process...")
         
-        prompt = f"""You are an expert resume optimizer. Your task is to tailor the following resume to match the job description provided.
+        prompt = f"""You are an expert resume optimizer. Your task is to extract, structure, and optimize the following resume to match the job description provided.
 
 INSTRUCTIONS:
 1. Analyze the job description to identify key skills, requirements, and keywords
 2. Optimize the resume to highlight relevant experience and skills that match the job
-3. Maintain the original resume structure and format
-4. Keep all information truthful - do not fabricate experience
-5. Emphasize achievements and metrics that align with the job requirements
-6. Use industry-standard keywords from the job description where appropriate
+3. Keep all information truthful - do not fabricate experience
+4. Emphasize achievements and metrics that align with the job requirements
+5. Use industry-standard keywords from the job description where appropriate
 
-CRITICAL FORMATTING RULES FOR PDF GENERATION:
-- Use ONLY standard hyphens (-) for bullet points. Do NOT use dots, circles, or special bullet characters
-- Use standard text quotes ("), not smart quotes or curly quotes
-- Do not use emojis or non-ASCII characters
-- Ensure the content is plain Markdown with clear headers (##) and lists
-- Use only ASCII-compatible punctuation marks
+CRITICAL DATA CLEANING RULES:
+- Do NOT include icons, emojis, or special characters (like map markers, phone icons, envelope icons)
+- Clean location and phone fields to contain ONLY text and standard punctuation
+- Use standard ASCII characters only
+- Remove any Unicode symbols from the original resume
 
 JOB DESCRIPTION:
 {job_description}
@@ -60,18 +60,52 @@ ORIGINAL RESUME:
 {resume_text}
 
 RESPONSE FORMAT:
-Please structure your response with two distinct Markdown sections:
+You MUST respond with ONLY valid JSON in this EXACT structure (no markdown code fencing):
 
-## Executive Summary of Changes
+{{
+  "executive_summary": ["Change/optimization 1", "Change/optimization 2", "Change/optimization 3"],
+  "personal_info": {{
+    "name": "Full Name",
+    "email": "email@example.com",
+    "phone": "+1 (555) 123-4567",
+    "linkedin": "https://linkedin.com/in/username",
+    "github": "https://github.com/username",
+    "location": "City, State"
+  }},
+  "skills": ["Skill 1", "Skill 2", "Skill 3"],
+  "experience": [
+    {{
+      "company": "Company Name",
+      "role": "Job Title",
+      "duration": "Jan 2020 - Present",
+      "location": "City, State",
+      "points": ["Achievement 1", "Achievement 2"]
+    }}
+  ],
+  "projects": [
+    {{
+      "title": "Project Name",
+      "role": "Your Role",
+      "duration": "Jan 2020 - Mar 2020",
+      "points": ["Description 1", "Description 2"]
+    }}
+  ],
+  "education": [
+    {{
+      "school": "University Name",
+      "degree": "Bachelor of Science in Computer Science",
+      "duration": "Sep 2016 - Jun 2020",
+      "location": "City, State"
+    }}
+  ]
+}}
 
-Provide a bulleted list of the top 3-5 changes made to align with the job requirements:
-- Explain which keywords were emphasized and why
-- Highlight specific skills that were brought to the forefront
-- Note any structural or content adjustments made
-
-## Tailored Resume
-
-Provide the complete, optimized resume content here. Maintain professional formatting and ensure all changes are truthful and based on the original resume."""
+CRITICAL RULES:
+- Return ONLY the JSON object
+- Do not wrap it in code fences
+- Ensure all fields are clean ASCII text
+- If a field is missing from the original resume, use an empty string "" or empty array []
+- Optimize bullet points to match job requirements"""
 
         try:
             response = self.client.models.generate_content(
@@ -79,8 +113,51 @@ Provide the complete, optimized resume content here. Maintain professional forma
                 contents=prompt
             )
             
-            print("[INFO] Resume tailoring completed successfully")
-            return response.text
+            raw_text = response.text.strip()
+            print("[INFO] Resume tailoring completed, parsing response...")
+            
+            # Strip markdown code fencing if present
+            cleaned_text = re.sub(r'^```json\s*', '', raw_text)
+            cleaned_text = re.sub(r'^```\s*', '', cleaned_text)
+            cleaned_text = re.sub(r'\s*```$', '', cleaned_text)
+            cleaned_text = cleaned_text.strip()
+            
+            # Parse JSON
+            try:
+                result = json.loads(cleaned_text)
+                
+                # Validate required top-level keys
+                required_keys = ["executive_summary", "personal_info", "skills", "experience", "education"]
+                missing_keys = [key for key in required_keys if key not in result]
+                
+                if missing_keys:
+                    print(f"[WARNING] Missing keys in response: {missing_keys}")
+                
+                print("[INFO] Successfully parsed structured JSON response")
+                return result
+                
+            except (json.JSONDecodeError, ValueError) as parse_error:
+                print(f"[ERROR] JSON parsing failed: {parse_error}")
+                print(f"[DEBUG] Raw response: {raw_text[:500]}")
+                print("[INFO] Returning fallback response")
+                
+                # Fallback: return minimal structure with error
+                return {
+                    "executive_summary": ["Parsing Error: Unable to parse AI response into structured format"],
+                    "personal_info": {
+                        "name": "Error",
+                        "email": "",
+                        "phone": "",
+                        "linkedin": "",
+                        "github": "",
+                        "location": ""
+                    },
+                    "skills": [],
+                    "experience": [],
+                    "projects": [],
+                    "education": [],
+                    "raw_error": raw_text[:1000]
+                }
             
         except Exception as e:
             error_msg = f"Error during resume tailoring: {str(e)}"
