@@ -46,6 +46,13 @@ INSTRUCTIONS:
 5. Emphasize achievements and metrics that align with the job requirements
 6. Use industry-standard keywords from the job description where appropriate
 
+CRITICAL FORMATTING RULES FOR PDF GENERATION:
+- Use ONLY standard hyphens (-) for bullet points. Do NOT use dots, circles, or special bullet characters
+- Use standard text quotes ("), not smart quotes or curly quotes
+- Do not use emojis or non-ASCII characters
+- Ensure the content is plain Markdown with clear headers (##) and lists
+- Use only ASCII-compatible punctuation marks
+
 JOB DESCRIPTION:
 {job_description}
 

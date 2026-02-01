@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from ingest import extract_text_from_pdf
 from scraper import JobScraper
 from tailor import ResumeTailor
+from exporter import save_as_pdf
 
 
 def setup_encoding():
@@ -226,14 +227,32 @@ def main():
                 # Display with Markdown rendering for beautiful formatting
                 st.markdown(tailored_resume)
                 
-                # Download button with Markdown format
-                st.download_button(
-                    label="Download Tailored Resume (Markdown)",
-                    data=tailored_resume,
-                    file_name="tailored_resume.md",
-                    mime="text/markdown",
-                    use_container_width=True
-                )
+                # Download buttons
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Download button with Markdown format
+                    st.download_button(
+                        label="Download as Markdown",
+                        data=tailored_resume,
+                        file_name="tailored_resume.md",
+                        mime="text/markdown",
+                        use_container_width=True
+                    )
+                
+                with col2:
+                    # Download button with PDF format
+                    try:
+                        pdf_bytes = save_as_pdf(tailored_resume)
+                        st.download_button(
+                            label="Download as PDF",
+                            data=pdf_bytes,
+                            file_name="tailored_resume.pdf",
+                            mime="application/pdf",
+                            use_container_width=True
+                        )
+                    except Exception as pdf_error:
+                        st.error(f"PDF generation failed: {str(pdf_error)}")
                 
             except Exception as e:
                 st.error(f"An error occurred: {str(e)}")
