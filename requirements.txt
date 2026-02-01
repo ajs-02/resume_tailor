@@ -1,0 +1,7 @@
+streamlit
+crawl4ai
+pypdf
+litellm
+python-dotenv
+playwright
+google-genai
