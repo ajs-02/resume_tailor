@@ -1,0 +1,18 @@
+[theme]
+# Primary Accent - "Electric Violet" (pops against dark backgrounds)
+primaryColor = "#8B5CF6"
+
+# Background - Deep Blue-Grey (easier on eyes than pure black)
+backgroundColor = "#0E1117"
+
+# Secondary Background (Sidebar/Inputs) - Lighter Grey
+secondaryBackgroundColor = "#262730"
+
+# Text - Off-white for readability
+textColor = "#FAFAFA"
+
+# Font
+font = "sans serif"
+
+[server]
+headless = true

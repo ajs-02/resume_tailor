@@ -1,0 +1,54 @@
+/* Import Inter font */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif;
+}
+
+/* Hide specific elements, NOT the whole header */
+#MainMenu {visibility: hidden;} /* The 3-dots menu */
+footer {visibility: hidden;}    /* The "Made with Streamlit" footer */
+.stDeployButton {display:none;} /* The "Deploy" button at top right */
+
+/* Polish the Buttons */
+div.stButton > button {
+    border-radius: 8px;
+    font-weight: 600;
+    border: 1px solid #4B5563;
+    background-color: #1F2937;
+    color: #F3F4F6;
+    transition: all 0.2s ease;
+}
+
+div.stButton > button:hover {
+    border-color: #8B5CF6;
+    color: #8B5CF6;
+    transform: translateY(-2px);
+}
+
+/* Primary Button Override */
+div.stButton > button[kind="primary"] {
+    background-color: #8B5CF6;
+    border: none;
+    color: white;
+}
+
+div.stButton > button[kind="primary"]:hover {
+    background-color: #7C3AED;
+    color: white;
+    box-shadow: 0 0 15px rgba(139, 92, 246, 0.5);
+}
+
+/* Sharp Input Boxes */
+.stTextInput > div > div > input {
+    border-radius: 6px;
+    border: 1px solid #374151;
+    background-color: #111827;
+    color: white;
+}
+
+/* Smooth out the Expanders */
+.streamlit-expanderHeader {
+    background-color: #1F2937;
+    border-radius: 6px;
+}

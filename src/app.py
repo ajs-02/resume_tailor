@@ -18,6 +18,16 @@ def setup_encoding():
         sys.stdout.reconfigure(encoding='utf-8')
         sys.stderr.reconfigure(encoding='utf-8')
 
+def load_css(file_name):
+    """Loads custom CSS styles using an absolute path."""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    css_path = os.path.join(current_dir, file_name)
+    try:
+        with open(css_path) as f:
+            st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+    except FileNotFoundError:
+        pass
+
 def get_api_key(user_provided_key: str) -> str:
     if user_provided_key and user_provided_key.strip():
         return user_provided_key.strip()
@@ -56,26 +66,25 @@ def process_resume_tailoring(resume_file, job_url: str, api_key: str):
             raise Exception(f"Failed to scrape job: {str(e)}")
 
     # Step 3: Tailor
-    with st.status("Step 3: Tailoring resume with AI...", expanded=True) as status:
+    with st.status("Step 3: Tailoring resume...", expanded=True) as status:
         try:
             os.environ["GEMINI_API_KEY"] = api_key
             tailor = ResumeTailor()
             result = tailor.tailor_resume(resume_text, job_description)
-            status.update(label="Step 3: Resume tailored successfully", state="complete")
+            status.update(label="Step 3: Tailoring complete", state="complete")
             return result
         except Exception as e:
-            status.update(label="Step 3: AI processing failed", state="error")
+            status.update(label="Step 3: Processing failed", state="error")
             raise Exception(f"Failed to tailor resume: {str(e)}")
 
 def render_resume_editor(data):
     """
     Renders a tabbed interface to edit resume data.
-    Returns the updated data dictionary.
     """
-    st.subheader("📝 Edit Resume Content")
+    st.subheader("Edit Content")
     
-    # Create Tabs
-    tabs = st.tabs(["👤 Contact Info", "🛠 Skills", "💼 Experience", "🚀 Projects", "🎓 Education"])
+    # CLEAN TABS (No Emojis)
+    tabs = st.tabs(["Contact Info", "Skills", "Experience", "Projects", "Education"])
     
     # --- Tab 1: Personal Info ---
     with tabs[0]:
@@ -93,9 +102,7 @@ def render_resume_editor(data):
     with tabs[1]:
         st.info("Edit skills as a comma-separated list.")
         skills_str = ", ".join(data.get('skills', []))
-        # Unique key 'skills_editor' prevents conflicts
         new_skills = st.text_area("Skills List", value=skills_str, height=150, key="skills_editor")
-        # Convert back to list
         data['skills'] = [s.strip() for s in new_skills.split(',') if s.strip()]
 
     # --- Tab 3: Experience ---
@@ -107,7 +114,6 @@ def render_resume_editor(data):
         for i, job in enumerate(data['experience']):
             with st.expander(f"{job.get('role', 'Job')} at {job.get('company', 'Company')}", expanded=(i==0)):
                 c1, c2 = st.columns(2)
-                # We use 'key' to store the index, keeping the label clean
                 job['role'] = c1.text_input("Role", job.get('role', ''), key=f"exp_role_{i}")
                 job['company'] = c2.text_input("Company", job.get('company', ''), key=f"exp_comp_{i}")
                 
@@ -129,7 +135,6 @@ def render_resume_editor(data):
                 c1, c2 = st.columns(2)
                 proj['title'] = c1.text_input("Project Title", proj.get('title', ''), key=f"proj_title_{i}")
                 proj['role'] = c2.text_input("Role", proj.get('role', ''), key=f"proj_role_{i}")
-                
                 proj['duration'] = st.text_input("Dates", proj.get('duration', ''), key=f"proj_date_{i}")
                 
                 bullets_str = "\n".join(proj.get('points', []))
@@ -152,21 +157,54 @@ def render_resume_editor(data):
 
 def main():
     setup_encoding()
-    st.set_page_config(page_title="Resume Tailor AI", page_icon="📄", layout="wide")
+    # No emoji in page icon, just use 'None' or a standard string if preferred, 
+    # but usually 'page_icon' is invisible to user on the page body. 
+    # We will keep it minimal.
+    st.set_page_config(page_title="Resume Tailor", page_icon=None, layout="wide")
+    
+    load_css("style.css")
     
     if 'resume_data' not in st.session_state:
         st.session_state['resume_data'] = None
 
-    st.title("Resume Tailor AI")
+    # --- Header ---
+    st.title("Resume Tailor")
+    st.markdown("""
+    <p style='font-size: 1.1rem; color: #9CA3AF; margin-bottom: 2rem;'>
+        Optimize your resume for any job posting. Analyze requirements and align your experience.
+    </p>
+    """, unsafe_allow_html=True)
 
+    # --- Sidebar ---
     with st.sidebar:
         st.header("Configuration")
-        resume_file = st.file_uploader("1. Upload Resume (PDF)", type=["pdf"])
-        api_key_input = st.text_input("2. Gemini API Key", type="password")
+        resume_file = st.file_uploader("Upload Resume (PDF)", type=["pdf"])
+        api_key_input = st.text_input("Gemini API Key", type="password")
         
-    job_url = st.text_input("Job Description URL", placeholder="https://example.com/job")
+        st.markdown("---")
+        
+        # --- About Me Section ---
+        st.header("About")
+        st.markdown("""
+        **Resume Tailor v1.2**
+        
+        Built by **Amanjeet Singh**.
+        """)
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            st.link_button("LinkedIn", "https://linkedin.com/in/aj-singh02", use_container_width=True)
+        with c2:
+            st.link_button("GitHub", "https://github.com/Amanjeet-Singh", use_container_width=True)
+            
+        st.markdown("---")
 
-    if st.button("Tailor My Resume", type="primary"):
+    # --- Main Input Area ---
+    st.subheader("Target Job")
+    job_url = st.text_input("Job Description URL", placeholder="https://linkedin.com/jobs/view/...")
+
+    # Clean Button Text
+    if st.button("Tailor Resume", type="primary", use_container_width=True):
         if not resume_file or not job_url:
             st.error("Please upload a resume and provide a URL.")
         else:
@@ -178,31 +216,31 @@ def main():
             except Exception as e:
                 st.error(f"Error: {str(e)}")
 
-    # --- Display Logic ---
+    # --- Results Display ---
     if st.session_state['resume_data'] is not None:
         st.divider()
         
-        # 1. Executive Summary
+        # Summary
         summary = st.session_state['resume_data'].get("executive_summary", [])
-        with st.expander("📊 Executive Summary of Changes", expanded=True):
+        with st.expander("Executive Summary of Changes", expanded=True):
             if isinstance(summary, list):
                 for item in summary:
                     st.markdown(f"- {item}")
             else:
                 st.markdown(summary)
         
-        # 2. The Editor (Updates Session State directly)
+        # Editor
         st.session_state['resume_data'] = render_resume_editor(st.session_state['resume_data'])
         
-        # 3. Actions
+        # Download Section
         st.divider()
+        st.subheader("Download")
         c1, c2 = st.columns(2)
         with c1:
             try:
-                # Generate PDF from the EDITED data
                 pdf_bytes = save_as_pdf(st.session_state['resume_data'])
                 st.download_button(
-                    label="⬇️ Download PDF",
+                    label="Download PDF",
                     data=pdf_bytes,
                     file_name="tailored_resume.pdf",
                     mime="application/pdf",
@@ -214,7 +252,7 @@ def main():
         with c2:
             json_data = json.dumps(st.session_state['resume_data'], indent=2)
             st.download_button(
-                label="⬇️ Download JSON",
+                label="Download JSON",
                 data=json_data,
                 file_name="resume_data.json",
                 mime="application/json",
