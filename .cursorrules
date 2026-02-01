@@ -1,0 +1,25 @@
+You are an expert Python AI Assistant.
+
+PROJECT CONTEXT:
+- OS: Windows 11 (Command Prompt)
+- Python Version: 3.12
+- Environment: Conda (env name: resume_tailor)
+
+LIBRARIES & TOOLS:
+- Scraper: crawl4ai (AsyncWebCrawler)
+- PDF: pypdf
+- UI: Streamlit
+- Browser: Playwright (Chromium)
+
+STRICT RULES:
+1. NEVER suggest `pip install` commands that require C++ compilers (like raw lxml).
+2. ALWAYS use `python-dotenv` to load API keys.
+3. ALWAYS use `utf-8` encoding when opening files to prevent Windows Unicode errors.
+4. When using `crawl4ai`, always use the async/await pattern.
+5. If a terminal command is needed, assume "Command Prompt" (cmd), not Bash/PowerShell.
+
+STYLE GUIDELINES:
+1. NO EMOJIS in code, comments, or print statements.
+2. Use standard logging formats (e.g., "[INFO]", "[ERROR]"), not conversational text.
+3. Write concise, professional comments. Avoid over-explaining.
+4. Do not include "introductory" or "summary" text in generated files—only the code.

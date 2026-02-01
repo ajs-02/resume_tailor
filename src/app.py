@@ -221,22 +221,17 @@ def main():
                 st.success("Resume tailoring completed successfully!")
                 
                 # Results section
-                st.header("Tailored Resume")
+                st.header("Results")
                 
-                # Display in text area
-                st.text_area(
-                    "Your optimized resume:",
-                    value=tailored_resume,
-                    height=400,
-                    help="Review and copy your tailored resume"
-                )
+                # Display with Markdown rendering for beautiful formatting
+                st.markdown(tailored_resume)
                 
-                # Download button
+                # Download button with Markdown format
                 st.download_button(
-                    label="Download Tailored Resume",
+                    label="Download Tailored Resume (Markdown)",
                     data=tailored_resume,
-                    file_name="tailored_resume.txt",
-                    mime="text/plain",
+                    file_name="tailored_resume.md",
+                    mime="text/markdown",
                     use_container_width=True
                 )
                 

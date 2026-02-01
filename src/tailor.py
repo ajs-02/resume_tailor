@@ -52,7 +52,19 @@ JOB DESCRIPTION:
 ORIGINAL RESUME:
 {resume_text}
 
-Please provide the optimized resume:"""
+RESPONSE FORMAT:
+Please structure your response with two distinct Markdown sections:
+
+## Executive Summary of Changes
+
+Provide a bulleted list of the top 3-5 changes made to align with the job requirements:
+- Explain which keywords were emphasized and why
+- Highlight specific skills that were brought to the forefront
+- Note any structural or content adjustments made
+
+## Tailored Resume
+
+Provide the complete, optimized resume content here. Maintain professional formatting and ensure all changes are truthful and based on the original resume."""
 
         try:
             response = self.client.models.generate_content(
