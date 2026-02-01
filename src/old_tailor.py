@@ -1,43 +1,42 @@
-import os
-import sys
 import json
+import os
 import re
+import sys
+
 from dotenv import load_dotenv
 from google import genai
 
+from config import API_KEY_NAMES, MODELS
+
 
 class ResumeTailor:
-    """
-    Resume tailoring service using Google Gemini API.
-    """
-    
+    """Resume tailoring service using Google Gemini API (legacy implementation)."""
+
     def __init__(self):
-        """
-        Initialize the ResumeTailor with Gemini API client.
-        """
+        """Initialize ResumeTailor with Gemini API client."""
         load_dotenv()
-        
-        api_key = os.getenv("GEMINI_API_KEY")
+
+        api_key = os.getenv(API_KEY_NAMES["google"])
         if not api_key:
-            raise ValueError("GEMINI_API_KEY not found in environment variables")
-        
+            raise ValueError(f"{API_KEY_NAMES['google']} not found in environment variables")
+
         self.client = genai.Client(api_key=api_key)
-        self.model_name = "gemini-2.0-flash"
+        self.model_name = MODELS["google"]
         print(f"[INFO] ResumeTailor initialized with model: {self.model_name}")
-    
+
+
     def tailor_resume(self, resume_text: str, job_description: str) -> dict:
-        """
-        Tailors a resume to match a specific job description.
-        
+        """Tailor resume to match job description.
+
         Args:
-            resume_text (str): The original resume text
-            job_description (str): The job posting description
-            
+            resume_text: Original resume text
+            job_description: Job posting description
+
         Returns:
-            dict: Structured dictionary with resume sections
+            Structured dictionary with resume sections
         """
         print("[INFO] Starting resume tailoring process...")
-        
+
         prompt = f"""You are an expert resume optimizer. Your task is to extract, structure, and optimize the following resume to match the job description provided.
 
 INSTRUCTIONS:
@@ -48,7 +47,7 @@ INSTRUCTIONS:
 5. Use industry-standard keywords from the job description where appropriate
 
 CRITICAL DATA CLEANING RULES:
-- Do NOT include icons, emojis, or special characters (like map markers, phone icons, envelope icons)
+- Do NOT include icons, emojis, or special characters
 - Clean location and phone fields to contain ONLY text and standard punctuation
 - Use standard ASCII characters only
 - Remove any Unicode symbols from the original resume
@@ -112,36 +111,32 @@ CRITICAL RULES:
                 model=self.model_name,
                 contents=prompt
             )
-            
+
             raw_text = response.text.strip()
             print("[INFO] Resume tailoring completed, parsing response...")
-            
-            # Strip markdown code fencing if present
+
             cleaned_text = re.sub(r'^```json\s*', '', raw_text)
             cleaned_text = re.sub(r'^```\s*', '', cleaned_text)
             cleaned_text = re.sub(r'\s*```$', '', cleaned_text)
             cleaned_text = cleaned_text.strip()
-            
-            # Parse JSON
+
             try:
                 result = json.loads(cleaned_text)
-                
-                # Validate required top-level keys
+
                 required_keys = ["executive_summary", "personal_info", "skills", "experience", "education"]
                 missing_keys = [key for key in required_keys if key not in result]
-                
+
                 if missing_keys:
                     print(f"[WARNING] Missing keys in response: {missing_keys}")
-                
+
                 print("[INFO] Successfully parsed structured JSON response")
                 return result
-                
+
             except (json.JSONDecodeError, ValueError) as parse_error:
                 print(f"[ERROR] JSON parsing failed: {parse_error}")
                 print(f"[DEBUG] Raw response: {raw_text[:500]}")
                 print("[INFO] Returning fallback response")
-                
-                # Fallback: return minimal structure with error
+
                 return {
                     "executive_summary": ["Parsing Error: Unable to parse AI response into structured format"],
                     "personal_info": {
@@ -158,90 +153,87 @@ CRITICAL RULES:
                     "education": [],
                     "raw_error": raw_text[:1000]
                 }
-            
+
         except Exception as e:
             error_msg = f"Error during resume tailoring: {str(e)}"
             print(f"[ERROR] {error_msg}")
             raise Exception(error_msg)
-    
+
     def test_connection(self, test_message: str = "Hello, are you ready?") -> str:
-        """
-        Tests the connection to Gemini API.
-        
+        """Test connection to Gemini API.
+
         Args:
-            test_message (str): Test message to send
-            
+            test_message: Test message to send
+
         Returns:
-            str: Response from the API
+            Response from the API
         """
         print(f"[INFO] Testing connection with message: '{test_message}'")
-        
+
         try:
             response = self.client.models.generate_content(
                 model=self.model_name,
                 contents=test_message
             )
-            
+
             print("[INFO] Connection test successful")
             return response.text
-            
+
         except Exception as e:
             error_msg = f"Connection test failed: {str(e)}"
             print(f"[ERROR] {error_msg}")
             raise Exception(error_msg)
 
 
+
 def main():
-    """
-    Test the ResumeTailor with a simple connection test.
-    """
+    """Test ResumeTailor with connection test."""
     if sys.platform == "win32":
         sys.stdout.reconfigure(encoding='utf-8')
         sys.stderr.reconfigure(encoding='utf-8')
-    
+
     print("-" * 60)
     print("[INFO] Starting ResumeTailor connection test...")
     print("-" * 60)
-    
+
     try:
         tailor = ResumeTailor()
-        
+
         print(f"[INFO] Using model version: {tailor.model_name}")
-        
+
         test_response = tailor.test_connection("Hello, are you ready?")
-        
+
         print("\n" + "-" * 60)
         print("[INFO] API Response:")
         print("-" * 60)
         print(test_response)
         print("-" * 60)
-        
+
         print("\n[INFO] Connection test completed successfully")
         return 0
-        
+
     except Exception as e:
         print(f"\n[ERROR] Test failed: {e}")
-        
-        # Attempt to list available models for debugging
+
         print("\n[INFO] Attempting to list available models for debugging...")
         try:
             load_dotenv()
-            api_key = os.getenv("GEMINI_API_KEY")
+            api_key = os.getenv(API_KEY_NAMES["google"])
             if api_key:
                 client = genai.Client(api_key=api_key)
                 print("[INFO] Available models:")
                 print("-" * 60)
-                
+
                 models = client.models.list()
                 for model in models:
                     print(f"  - {model.name}")
-                
+
                 print("-" * 60)
             else:
-                print("[ERROR] Cannot list models: GEMINI_API_KEY not found")
+                print(f"[ERROR] Cannot list models: {API_KEY_NAMES['google']} not found")
         except Exception as list_error:
             print(f"[ERROR] Failed to list models: {list_error}")
-        
+
         return 1
 
 

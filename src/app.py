@@ -1,27 +1,29 @@
+import asyncio
+import json
 import os
 import sys
-import asyncio
 import tempfile
-import json
+
 import streamlit as st
 from dotenv import load_dotenv
 
-# Import local modules
+from config import API_KEY_NAMES, FREE_TIER_MAX_REQUESTS, STREAMLIT_CONFIG, STYLE_CSS
+from exporter import save_as_pdf
 from ingest import extract_text_from_pdf
 from scraper import JobScraper
 from tailor import ResumeTailor
-from exporter import save_as_pdf
 
 def setup_encoding():
-    """Ensure UTF-8 encoding for Windows."""
+    """Configure UTF-8 encoding for Windows console output."""
     if sys.platform == "win32":
         sys.stdout.reconfigure(encoding='utf-8')
         sys.stderr.reconfigure(encoding='utf-8')
 
-def load_css(file_name):
-    """Loads custom CSS styles using an absolute path."""
+
+def load_css():
+    """Load custom CSS styles from file."""
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    css_path = os.path.join(current_dir, file_name)
+    css_path = os.path.join(current_dir, STYLE_CSS)
     try:
         with open(css_path) as f:
             st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
@@ -29,30 +31,48 @@ def load_css(file_name):
         pass
 
 def get_api_key(user_provided_key: str, provider: str) -> str:
+    """Resolve API key from user input or environment variables.
 
+    Args:
+        user_provided_key: API key entered by user
+        provider: AI provider name (google/openai/anthropic)
+
+    Returns:
+        Valid API key string
+
+    Raises:
+        ValueError: If no API key is found
+    """
     if user_provided_key and user_provided_key.strip():
         return user_provided_key.strip()
-    
-    # User didn't provide a key, let's look for a system fallback
+
     load_dotenv()
-    
-    env_key_name = f"{provider.upper()}_API_KEY" # e.g.  OPENAI_API_KEY
-    if provider == "google":
-        env_key_name = "GEMINI_API_KEY" # Special case for Google naming convention
-        
+    env_key_name = API_KEY_NAMES.get(provider, f"{provider.upper()}_API_KEY")
     env_key = os.getenv(env_key_name)
-    
+
     if env_key:
         return env_key
-        
+
     raise ValueError(f"No API key provided. Please enter your {provider.capitalize()} API Key.")
 
 async def scrape_job_async(url: str) -> str:
+    """Async wrapper for job scraping."""
     async with JobScraper() as scraper:
         return await scraper.scrape_job(url)
 
+
 def process_resume_tailoring(resume_file, job_url: str, api_key: str, provider: str = "google"):
-    # Step 1: Extract
+    """Process resume tailoring workflow: extract, scrape, tailor.
+
+    Args:
+        resume_file: Uploaded PDF file object
+        job_url: Job posting URL
+        api_key: API key for LLM provider
+        provider: AI provider name (default: google)
+
+    Returns:
+        Structured resume data dictionary
+    """
     with st.status("Step 1: Scanning resume...", expanded=True) as status:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
             tmp_file.write(resume_file.read())
@@ -64,7 +84,6 @@ def process_resume_tailoring(resume_file, job_url: str, api_key: str, provider: 
             if os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
-    # Step 2: Scrape
     with st.status("Step 2: Scraping job description...", expanded=True) as status:
         try:
             if sys.platform == "win32":
@@ -75,16 +94,10 @@ def process_resume_tailoring(resume_file, job_url: str, api_key: str, provider: 
             status.update(label="Step 2: Scraping failed", state="error")
             raise Exception(f"Failed to scrape job: {str(e)}")
 
-    # Step 3: Tailor
     with st.status("Step 3: Tailoring resume...", expanded=True) as status:
         try:
-            # os.environ is no longer strictly needed here, but safe to keep.
-            os.environ["GEMINI_API_KEY"] = api_key 
-            
-            # --- CHANGE THIS LINE ---
+            os.environ[API_KEY_NAMES["google"]] = api_key
             tailor = ResumeTailor(provider=provider, api_key=api_key)
-            # ------------------------
-            
             result = tailor.tailor_resume(resume_text, job_description)
             status.update(label="Step 3: Tailoring complete", state="complete")
             return result
@@ -92,16 +105,12 @@ def process_resume_tailoring(resume_file, job_url: str, api_key: str, provider: 
             status.update(label="Step 3: Processing failed", state="error")
             raise Exception(f"Failed to tailor resume: {str(e)}")
 
+
 def render_resume_editor(data):
-    """
-    Renders a tabbed interface to edit resume data.
-    """
+    """Render tabbed interface for editing resume sections."""
     st.subheader("Edit Content")
-    
-    # CLEAN TABS (No Emojis)
     tabs = st.tabs(["Contact Info", "Skills", "Experience", "Projects", "Education"])
-    
-    # --- Tab 1: Personal Info ---
+
     with tabs[0]:
         col1, col2 = st.columns(2)
         with col1:
@@ -113,54 +122,50 @@ def render_resume_editor(data):
             data['personal_info']['linkedin'] = st.text_input("LinkedIn URL", data['personal_info'].get('linkedin', ''), key="pi_link")
             data['personal_info']['github'] = st.text_input("GitHub URL", data['personal_info'].get('github', ''), key="pi_git")
 
-    # --- Tab 2: Skills ---
     with tabs[1]:
         st.info("Edit skills as a comma-separated list.")
         skills_str = ", ".join(data.get('skills', []))
         new_skills = st.text_area("Skills List", value=skills_str, height=150, key="skills_editor")
         data['skills'] = [s.strip() for s in new_skills.split(',') if s.strip()]
 
-    # --- Tab 3: Experience ---
     with tabs[2]:
         st.info("Edit your work history. Bullets should be separated by new lines.")
         if 'experience' not in data:
             data['experience'] = []
-            
+
         for i, job in enumerate(data['experience']):
-            with st.expander(f"{job.get('role', 'Job')} at {job.get('company', 'Company')}", expanded=(i==0)):
+            with st.expander(f"{job.get('role', 'Job')} at {job.get('company', 'Company')}", expanded=(i == 0)):
                 c1, c2 = st.columns(2)
                 job['role'] = c1.text_input("Role", job.get('role', ''), key=f"exp_role_{i}")
                 job['company'] = c2.text_input("Company", job.get('company', ''), key=f"exp_comp_{i}")
-                
+
                 c3, c4 = st.columns(2)
                 job['duration'] = c3.text_input("Dates", job.get('duration', ''), key=f"exp_date_{i}")
                 job['location'] = c4.text_input("Location", job.get('location', ''), key=f"exp_loc_{i}")
-                
+
                 bullets_str = "\n".join(job.get('points', []))
                 new_bullets = st.text_area("Bullets (One per line)", value=bullets_str, height=200, key=f"exp_bullets_{i}")
                 job['points'] = [b.strip() for b in new_bullets.split('\n') if b.strip()]
 
-    # --- Tab 4: Projects ---
     with tabs[3]:
         if 'projects' not in data:
             data['projects'] = []
-            
+
         for i, proj in enumerate(data['projects']):
-            with st.expander(f"{proj.get('title', 'Project')}", expanded=(i==0)):
+            with st.expander(f"{proj.get('title', 'Project')}", expanded=(i == 0)):
                 c1, c2 = st.columns(2)
                 proj['title'] = c1.text_input("Project Title", proj.get('title', ''), key=f"proj_title_{i}")
                 proj['role'] = c2.text_input("Role", proj.get('role', ''), key=f"proj_role_{i}")
                 proj['duration'] = st.text_input("Dates", proj.get('duration', ''), key=f"proj_date_{i}")
-                
+
                 bullets_str = "\n".join(proj.get('points', []))
                 new_bullets = st.text_area("Project Details (One per line)", value=bullets_str, height=150, key=f"proj_desc_{i}")
                 proj['points'] = [b.strip() for b in new_bullets.split('\n') if b.strip()]
 
-    # --- Tab 5: Education ---
     with tabs[4]:
         if 'education' not in data:
             data['education'] = []
-            
+
         for i, edu in enumerate(data['education']):
             with st.expander(f"{edu.get('school', 'School')}"):
                 c1, c2 = st.columns(2)
@@ -170,21 +175,19 @@ def render_resume_editor(data):
 
     return data
 
+
 def main():
+    """Main application entry point."""
     setup_encoding()
-    st.set_page_config(page_title="Resume Tailor", page_icon=None, layout="wide")
-    
-    load_css("style.css")
-    
-    # --- 1. Initialize Session State ---
+    st.set_page_config(**STREAMLIT_CONFIG)
+    load_css()
+
     if 'resume_data' not in st.session_state:
         st.session_state['resume_data'] = None
-        
-    # Initialize the Usage Counter (The "Freeloader" Protection)
+
     if 'usage_count' not in st.session_state:
         st.session_state['usage_count'] = 0
 
-    # --- Header ---
     st.title("Resume Tailor")
     st.markdown("""
     <p style='font-size: 1.1rem; color: #9CA3AF; margin-bottom: 2rem;'>
@@ -192,87 +195,74 @@ def main():
     </p>
     """, unsafe_allow_html=True)
 
-    # --- Sidebar ---
     with st.sidebar:
         st.header("Configuration")
-        
+
         provider = st.radio(
             "Select AI Model",
             options=["google", "openai", "anthropic"],
             format_func=lambda x: x.capitalize(),
-            horizontal=True,  # Makes them sit side-by-side
+            horizontal=True,
             help="Choose which AI provider to use."
         )
-        
-        # Helper text changes based on limit status
-        limit_msg = f"Leave blank to use free tier ({3 - st.session_state['usage_count']} tries left)"
-        
+
+        limit_msg = f"Leave blank to use free tier ({FREE_TIER_MAX_REQUESTS - st.session_state['usage_count']} tries left)"
         api_label = f"{provider.capitalize()} API Key"
         api_key_input = st.text_input(api_label, type="password", help=limit_msg)
-        
+
         resume_file = st.file_uploader("Upload Resume (PDF)", type=["pdf"])
-        
+
         st.markdown("---")
-        
-        # --- About Section ---
         st.header("About")
         st.markdown("""
         **Resume Tailor v1.4**
-        
+
         Built by **Amanjeet Singh**.
         """)
-        
+
         c1, c2 = st.columns(2)
         with c1:
             st.link_button("LinkedIn", "https://linkedin.com/in/aj-singh02", use_container_width=True)
         with c2:
             st.link_button("GitHub", "https://github.com/Amanjeet-Singh", use_container_width=True)
-            
+
         st.markdown("---")
 
-    # --- Main Input Area ---
     st.subheader("Target Job")
     job_url = st.text_input("Job Description URL", placeholder="https://linkedin.com/jobs/view/...")
 
-    # --- Tailor Button Logic ---
     if st.button("Tailor Resume", type="primary", use_container_width=True):
         if not resume_file or not job_url:
             st.error("Please upload a resume and provide a URL.")
         else:
-            # --- RATE LIMIT CHECK ---
             can_proceed = True
             using_free_tier = False
-            
-            # If user did NOT provide a key, they are on the "Free Tier"
+
             if not api_key_input:
                 using_free_tier = True
-                if st.session_state['usage_count'] >= 3:
-                    st.error("🚫 Free trial limit reached (3/3). Please enter your own API key to continue.")
+                if st.session_state['usage_count'] >= FREE_TIER_MAX_REQUESTS:
+                    st.error(f"Free trial limit reached ({FREE_TIER_MAX_REQUESTS}/{FREE_TIER_MAX_REQUESTS}). Please enter your own API key to continue.")
                     can_proceed = False
-            
+
             if can_proceed:
                 try:
-                    # Resolve key (Pass provider now!)
                     api_key = get_api_key(api_key_input, provider)
-                    
-                    # Increment counter only if using free tier
+
                     if using_free_tier:
                         st.session_state['usage_count'] += 1
-                        
+
                     result = process_resume_tailoring(resume_file, job_url, api_key, provider)
                     st.session_state['resume_data'] = result
                     st.rerun()
-                    
+
                 except ValueError as ve:
                     st.warning(str(ve))
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
 
-    # --- Results Display ---
     if st.session_state['resume_data'] is not None:
         st.divider()
-        
-        # Summary
+
         summary = st.session_state['resume_data'].get("executive_summary", [])
         with st.expander("Executive Summary of Changes", expanded=True):
             if isinstance(summary, list):
@@ -280,11 +270,9 @@ def main():
                     st.markdown(f"- {item}")
             else:
                 st.markdown(summary)
-        
-        # Editor
+
         st.session_state['resume_data'] = render_resume_editor(st.session_state['resume_data'])
-        
-        # Download Section
+
         st.divider()
         st.subheader("Download")
         c1, c2 = st.columns(2)
@@ -300,7 +288,7 @@ def main():
                 )
             except Exception as e:
                 st.error(f"PDF Error: {str(e)}")
-        
+
         with c2:
             json_data = json.dumps(st.session_state['resume_data'], indent=2)
             st.download_button(
@@ -310,6 +298,7 @@ def main():
                 mime="application/json",
                 use_container_width=True
             )
+
 
 if __name__ == "__main__":
     main()

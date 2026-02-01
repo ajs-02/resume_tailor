@@ -1,4 +1,59 @@
+# Python
 __pycache__/
+*.py[cod]
 *.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Virtual Environments
+venv/
+env/
+ENV/
+.venv
+
+# Environment Variables
 .env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.test
+
+# IDE and Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 .DS_Store
+
+# Cursor
+.cursorrules
+.cursorignore
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Logs
+*.log
+
+# OS
+Thumbs.db
+
+# Playwright
+.playwright/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Project Specific
+my_resume.pdf
+*.pdf
