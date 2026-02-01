@@ -28,20 +28,30 @@ def load_css(file_name):
     except FileNotFoundError:
         pass
 
-def get_api_key(user_provided_key: str) -> str:
+def get_api_key(user_provided_key: str, provider: str) -> str:
+
     if user_provided_key and user_provided_key.strip():
         return user_provided_key.strip()
+    
+    # User didn't provide a key, let's look for a system fallback
     load_dotenv()
-    env_key = os.getenv("GEMINI_API_KEY")
+    
+    env_key_name = f"{provider.upper()}_API_KEY" # e.g.  OPENAI_API_KEY
+    if provider == "google":
+        env_key_name = "GEMINI_API_KEY" # Special case for Google naming convention
+        
+    env_key = os.getenv(env_key_name)
+    
     if env_key:
         return env_key
-    raise ValueError("No API key provided. Please enter your Gemini API key.")
+        
+    raise ValueError(f"No API key provided. Please enter your {provider.capitalize()} API Key.")
 
 async def scrape_job_async(url: str) -> str:
     async with JobScraper() as scraper:
         return await scraper.scrape_job(url)
 
-def process_resume_tailoring(resume_file, job_url: str, api_key: str):
+def process_resume_tailoring(resume_file, job_url: str, api_key: str, provider: str = "google"):
     # Step 1: Extract
     with st.status("Step 1: Scanning resume...", expanded=True) as status:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
@@ -68,8 +78,13 @@ def process_resume_tailoring(resume_file, job_url: str, api_key: str):
     # Step 3: Tailor
     with st.status("Step 3: Tailoring resume...", expanded=True) as status:
         try:
-            os.environ["GEMINI_API_KEY"] = api_key
-            tailor = ResumeTailor()
+            # os.environ is no longer strictly needed here, but safe to keep.
+            os.environ["GEMINI_API_KEY"] = api_key 
+            
+            # --- CHANGE THIS LINE ---
+            tailor = ResumeTailor(provider=provider, api_key=api_key)
+            # ------------------------
+            
             result = tailor.tailor_resume(resume_text, job_description)
             status.update(label="Step 3: Tailoring complete", state="complete")
             return result
@@ -157,15 +172,17 @@ def render_resume_editor(data):
 
 def main():
     setup_encoding()
-    # No emoji in page icon, just use 'None' or a standard string if preferred, 
-    # but usually 'page_icon' is invisible to user on the page body. 
-    # We will keep it minimal.
     st.set_page_config(page_title="Resume Tailor", page_icon=None, layout="wide")
     
     load_css("style.css")
     
+    # --- 1. Initialize Session State ---
     if 'resume_data' not in st.session_state:
         st.session_state['resume_data'] = None
+        
+    # Initialize the Usage Counter (The "Freeloader" Protection)
+    if 'usage_count' not in st.session_state:
+        st.session_state['usage_count'] = 0
 
     # --- Header ---
     st.title("Resume Tailor")
@@ -178,15 +195,29 @@ def main():
     # --- Sidebar ---
     with st.sidebar:
         st.header("Configuration")
+        
+        provider = st.radio(
+            "Select AI Model",
+            options=["google", "openai", "anthropic"],
+            format_func=lambda x: x.capitalize(),
+            horizontal=True,  # Makes them sit side-by-side
+            help="Choose which AI provider to use."
+        )
+        
+        # Helper text changes based on limit status
+        limit_msg = f"Leave blank to use free tier ({3 - st.session_state['usage_count']} tries left)"
+        
+        api_label = f"{provider.capitalize()} API Key"
+        api_key_input = st.text_input(api_label, type="password", help=limit_msg)
+        
         resume_file = st.file_uploader("Upload Resume (PDF)", type=["pdf"])
-        api_key_input = st.text_input("Gemini API Key", type="password")
         
         st.markdown("---")
         
-        # --- About Me Section ---
+        # --- About Section ---
         st.header("About")
         st.markdown("""
-        **Resume Tailor v1.2**
+        **Resume Tailor v1.4**
         
         Built by **Amanjeet Singh**.
         """)
@@ -203,18 +234,39 @@ def main():
     st.subheader("Target Job")
     job_url = st.text_input("Job Description URL", placeholder="https://linkedin.com/jobs/view/...")
 
-    # Clean Button Text
+    # --- Tailor Button Logic ---
     if st.button("Tailor Resume", type="primary", use_container_width=True):
         if not resume_file or not job_url:
             st.error("Please upload a resume and provide a URL.")
         else:
-            try:
-                api_key = get_api_key(api_key_input)
-                result = process_resume_tailoring(resume_file, job_url, api_key)
-                st.session_state['resume_data'] = result
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
+            # --- RATE LIMIT CHECK ---
+            can_proceed = True
+            using_free_tier = False
+            
+            # If user did NOT provide a key, they are on the "Free Tier"
+            if not api_key_input:
+                using_free_tier = True
+                if st.session_state['usage_count'] >= 3:
+                    st.error("🚫 Free trial limit reached (3/3). Please enter your own API key to continue.")
+                    can_proceed = False
+            
+            if can_proceed:
+                try:
+                    # Resolve key (Pass provider now!)
+                    api_key = get_api_key(api_key_input, provider)
+                    
+                    # Increment counter only if using free tier
+                    if using_free_tier:
+                        st.session_state['usage_count'] += 1
+                        
+                    result = process_resume_tailoring(resume_file, job_url, api_key, provider)
+                    st.session_state['resume_data'] = result
+                    st.rerun()
+                    
+                except ValueError as ve:
+                    st.warning(str(ve))
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
 
     # --- Results Display ---
     if st.session_state['resume_data'] is not None:
