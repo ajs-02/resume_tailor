@@ -178,7 +178,7 @@ def save_as_pdf(resume_data):
                     location=edu.get('location', '')
                 )
 
-        return bytes(pdf.output())
+        return pdf.output(dest='S').encode('latin-1')
 
     except Exception as e:
         logger.error(f"PDF Generation failed: {str(e)}")
@@ -188,4 +188,4 @@ def save_as_pdf(resume_data):
         size_error = PDF_CONFIG["font_sizes"]["error"]
         err_pdf.set_font(font, '', size_error)
         err_pdf.multi_cell(0, 10, f"Error generating PDF: {str(e)}")
-        return bytes(err_pdf.output())
+        return err_pdf.output(dest='S').encode('latin-1')

@@ -23,11 +23,10 @@ The application implements a provider-agnostic architecture supporting Google Ge
 **Data Processing:**
 - pypdf (PDF text extraction)
 - fpdf (PDF generation)
-- crawl4ai (async web scraping with Playwright)
+- requests + BeautifulSoup (web scraping)
 
 **Infrastructure:**
 - python-dotenv (environment configuration)
-- asyncio (async job scraping)
 
 ## Architecture
 
@@ -64,17 +63,17 @@ src/
 ├── config.py        # Centralized configuration (models, API keys, constants)
 ├── app.py           # Streamlit UI and application orchestration
 ├── tailor.py        # LLM provider factory and prompt engineering
-├── scraper.py       # Async job description scraper (crawl4ai + Playwright)
+├── scraper.py       # Job description scraper (requests + BeautifulSoup)
 ├── ingest.py        # PDF text extraction
 ├── exporter.py      # PDF generation with ATS-optimized layout
-└── old_tailor.py    # Legacy implementation (Google Gemini SDK)
+└── check_models.py  # Gemini model availability checker
 ```
 
 ### Data Flow
 
-1. User uploads PDF resume and provides job URL
+1. User uploads PDF resume and provides job description (URL or manual input)
 2. `ingest.py` extracts text from PDF using pypdf
-3. `scraper.py` fetches and parses job description via crawl4ai
+3. `scraper.py` fetches and parses job description via HTTP (if URL provided)
 4. `tailor.py` sends resume + job description to selected LLM provider
 5. LLM returns structured JSON with optimized resume sections
 6. `exporter.py` generates ATS-compatible PDF from structured data
@@ -111,9 +110,6 @@ conda activate resume_tailor
 
 # Install dependencies
 pip install -r requirements.txt
-
-# Install Playwright browsers (required for crawl4ai)
-playwright install chromium
 ```
 
 ### Configuration
@@ -163,6 +159,14 @@ python src/check_models.py
 
 Session-based rate limiting restricts free-tier usage to 3 requests per session. Users can bypass limits by providing their own API keys. Counter persists across Streamlit reruns via `st.session_state`.
 
+### Job Description Input
+
+Dual input method for flexibility:
+- **Automatic scraping**: Fetches content via HTTP with browser-like headers
+- **Manual input**: Users paste job description directly (bypasses scraping issues)
+
+Sites with anti-bot protection (Indeed, etc.) may block automated scraping. Manual input provides 100% reliability fallback.
+
 ### Prompt Engineering
 
 The system uses a structured prompt that enforces JSON output with specific schema requirements:
@@ -172,7 +176,7 @@ The system uses a structured prompt that enforces JSON output with specific sche
 
 ### PDF Generation
 
-PDF export uses fpdf with:
+PDF export uses fpdf 1.7.2 with:
 - Latin-1 encoding (Unicode characters converted to ASCII equivalents)
 - Single-column ATS-optimized layout
 - Configurable font sizes via `PDF_CONFIG`
@@ -181,14 +185,13 @@ PDF export uses fpdf with:
 ### Windows Compatibility
 
 - Explicit UTF-8 encoding for stdout/stderr
-- WindowsProactorEventLoopPolicy for asyncio operations
 - Cross-platform path handling via `os.path.join()`
 
 ## Known Limitations
 
 - Free tier limited to 3 requests per session (by design)
 - PDF export restricted to Latin-1 encoding (no emoji support)
-- Web scraper requires Playwright-compatible browser
+- Some job sites block automated scraping (manual input available)
 - No persistent storage (session state only)
 - Single-user application (no authentication)
 
@@ -221,7 +224,8 @@ PDF export uses fpdf with:
 | `langchain-openai` | Latest | OpenAI GPT integration |
 | `langchain-anthropic` | Latest | Anthropic Claude integration |
 | `google-generativeai` | Latest | Direct Gemini API access |
-| `crawl4ai` | Latest | Async web scraping |
+| `requests` | Latest | HTTP client for web scraping |
+| `beautifulsoup4` | Latest | HTML parsing |
 | `pypdf` | Latest | PDF text extraction |
 | `fpdf` | Latest | PDF generation |
 | `python-dotenv` | Latest | Environment variable management |

@@ -22,10 +22,9 @@ FREE_TIER_MAX_REQUESTS = 3
 
 # Scraper Configuration
 SCRAPER_CONFIG = {
-    "verbose": True,
-    "magic": True,
-    "bypass_cache": True,
-    "word_count_threshold": 10
+    "timeout": 10,
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "min_content_length": 100
 }
 
 # UI Configuration

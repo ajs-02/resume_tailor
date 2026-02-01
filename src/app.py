@@ -1,4 +1,3 @@
-import asyncio
 import json
 import os
 import sys
@@ -55,20 +54,21 @@ def get_api_key(user_provided_key: str, provider: str) -> str:
 
     raise ValueError(f"No API key provided. Please enter your {provider.capitalize()} API Key.")
 
-async def scrape_job_async(url: str) -> str:
-    """Async wrapper for job scraping."""
-    async with JobScraper() as scraper:
-        return await scraper.scrape_job(url)
+def scrape_job_sync(url: str) -> str:
+    """Synchronous job scraping."""
+    with JobScraper() as scraper:
+        return scraper.scrape_job(url)
 
 
-def process_resume_tailoring(resume_file, job_url: str, api_key: str, provider: str = "google"):
+def process_resume_tailoring(resume_file, job_description: str, api_key: str, provider: str = "google", job_url: str = None):
     """Process resume tailoring workflow: extract, scrape, tailor.
 
     Args:
         resume_file: Uploaded PDF file object
-        job_url: Job posting URL
+        job_description: Job description text (either scraped or manual)
         api_key: API key for LLM provider
         provider: AI provider name (default: google)
+        job_url: Optional job posting URL (for display purposes)
 
     Returns:
         Structured resume data dictionary
@@ -84,25 +84,15 @@ def process_resume_tailoring(resume_file, job_url: str, api_key: str, provider: 
             if os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
-    with st.status("Step 2: Scraping job description...", expanded=True) as status:
-        try:
-            if sys.platform == "win32":
-                asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-            job_description = asyncio.run(scrape_job_async(job_url))
-            status.update(label="Step 2: Job description scraped successfully", state="complete")
-        except Exception as e:
-            status.update(label="Step 2: Scraping failed", state="error")
-            raise Exception(f"Failed to scrape job: {str(e)}")
-
-    with st.status("Step 3: Tailoring resume...", expanded=True) as status:
+    with st.status("Step 2: Tailoring resume...", expanded=True) as status:
         try:
             os.environ[API_KEY_NAMES["google"]] = api_key
             tailor = ResumeTailor(provider=provider, api_key=api_key)
             result = tailor.tailor_resume(resume_text, job_description)
-            status.update(label="Step 3: Tailoring complete", state="complete")
+            status.update(label="Step 2: Tailoring complete", state="complete")
             return result
         except Exception as e:
-            status.update(label="Step 3: Processing failed", state="error")
+            status.update(label="Step 2: Processing failed", state="error")
             raise Exception(f"Failed to tailor resume: {str(e)}")
 
 
@@ -229,11 +219,33 @@ def main():
         st.markdown("---")
 
     st.subheader("Target Job")
-    job_url = st.text_input("Job Description URL", placeholder="https://linkedin.com/jobs/view/...")
+    
+    input_method = st.radio(
+        "How would you like to provide the job description?",
+        ["URL (Automatic Scraping)", "Manual Text Input"],
+        horizontal=True
+    )
+    
+    job_url = None
+    job_description_manual = None
+    
+    if input_method == "URL (Automatic Scraping)":
+        job_url = st.text_input("Job Description URL", placeholder="https://linkedin.com/jobs/view/...")
+        st.caption("⚠️ Note: Some sites (like Indeed) may block automated scraping. If scraping fails, use Manual Text Input.")
+    else:
+        job_description_manual = st.text_area(
+            "Paste Job Description",
+            placeholder="Copy and paste the full job description here...",
+            height=300
+        )
 
     if st.button("Tailor Resume", type="primary", use_container_width=True):
-        if not resume_file or not job_url:
-            st.error("Please upload a resume and provide a URL.")
+        if not resume_file:
+            st.error("Please upload a resume.")
+        elif input_method == "URL (Automatic Scraping)" and not job_url:
+            st.error("Please provide a job URL.")
+        elif input_method == "Manual Text Input" and not job_description_manual:
+            st.error("Please paste the job description.")
         else:
             can_proceed = True
             using_free_tier = False
@@ -251,7 +263,20 @@ def main():
                     if using_free_tier:
                         st.session_state['usage_count'] += 1
 
-                    result = process_resume_tailoring(resume_file, job_url, api_key, provider)
+                    if input_method == "URL (Automatic Scraping)":
+                        with st.status("Scraping job description...", expanded=True) as status:
+                            try:
+                                job_description = scrape_job_sync(job_url)
+                                status.update(label="Job description scraped successfully", state="complete")
+                            except Exception as e:
+                                status.update(label="Scraping failed", state="error")
+                                st.error(str(e))
+                                st.info("💡 Tip: Switch to 'Manual Text Input' above and paste the job description directly.")
+                                return
+                    else:
+                        job_description = job_description_manual
+
+                    result = process_resume_tailoring(resume_file, job_description, api_key, provider, job_url)
                     st.session_state['resume_data'] = result
                     st.rerun()
 
